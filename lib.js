@@ -95,7 +95,7 @@ exports.run = argv => {
             return false;
         });
 
-        return vstsAuth.getAuthToken().then(accessToken => {
+        return vstsAuth.getAuthToken(argv.har).then(accessToken => {
             let newTokenDecoded = jwt.decode(accessToken);
             console.log('\nnew token received:',
                 '\n\tnbf:', newTokenDecoded && newTokenDecoded.nbf,

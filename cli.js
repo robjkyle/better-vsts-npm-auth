@@ -58,6 +58,11 @@ const argv = require('yargs')
         describe: 'path to npmrc config',
         type: 'string'
     })
+    .options('har', {
+        describe: 'capture har and save locally for debugging',
+        type: 'boolean',
+        default: false
+    })
     .config(config.get())
     .command({
         command: 'config [command]',

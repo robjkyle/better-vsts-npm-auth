@@ -1,5 +1,7 @@
-const request = require('request');
 const config = require('./config.js');
+const request = require('request');
+const RCH = require('request-capture-har');
+const requestCaptureHar = new RCH(request);
 
 const k_REFRESH_TOKEN = 'refresh_token';
 
@@ -11,7 +13,7 @@ class AuthorizationError extends Error {
 
 exports.AuthorizationError = AuthorizationError;
 exports.setRefreshToken = t => config.set(k_REFRESH_TOKEN, t);
-exports.getAuthToken = () => {
+exports.getAuthToken = captureHar => {
     // we can short-circuit in a lab environment where SYSTEM_ACCESSTOKEN is available
     // this avoids the instability of making unnecessary network requests
     // docs: https://docs.microsoft.com/en-us/vsts/build-release/concepts/definitions/build/variables?tabs=batch#predefined-variables
@@ -31,21 +33,35 @@ exports.getAuthToken = () => {
     }
 
     return new Promise((resolve, reject) => {
-        return request.post(configObj.tokenEndpoint, {
+        let requestId = Date.now();
+        let options = {
+            uri: configObj.tokenEndpoint,
+            method: 'POST',
             json: true,
             qs: {
                 code: configObj[k_REFRESH_TOKEN]
+            },
+            callback: (err, res, body) => {
+                console.log(`[${requestId} complete.]`);
+                if (err) {
+                    return reject(err);
+                } else if (!body || !body[k_REFRESH_TOKEN] || !body.access_token) {
+                    return reject('malformed response body:\n' + body);
+                } else {
+                    // stash the refresh_token
+                    config.set(k_REFRESH_TOKEN, body[k_REFRESH_TOKEN]);
+                    return resolve(body.access_token);
+                }
             }
-        }, (err, res, body) => {
-            if (err) {
-                return reject(err);
-            } else if (!body || !body[k_REFRESH_TOKEN] || !body.access_token) {
-                return reject('malformed response body:\n' + body);
-            } else {
-                // stash the refresh_token
-                config.set(k_REFRESH_TOKEN, body[k_REFRESH_TOKEN]);
-                return resolve(body.access_token);
-            }
-        });
+        };
+
+        console.log(`[${requestId}] ${options.method}: ${options.uri}`);
+        return requestCaptureHar.request(options);
+    }).then(result => {
+        // if the har flag is set, stash the result
+        if (captureHar) {
+            requestCaptureHar.saveHar(`better-vsts-npm-auth_${Date.now()}.har`);
+        }
+        return Promise.resolve(result);
     });
 };
